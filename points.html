@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/lodash/4.17.4/lodash.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/jstat/1.5.3/jstat.min.js"></script>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Some points</title>
+</head>
+
+<body></body>
+
+<script>
+    var HEIGHT  = $(window).height();
+    var WIDTH   = $(window).width();
+    var MARGIN  = 20;
+
+    var svgCanvas = createSvgCanvas();
+    $(document.body).append(svgCanvas);
+    $(document.body).append(createCodeLink);
+
+    // Trigger the animation
+    var points = generatePoints(75);
+    update();
+
+    function createCodeLink() {
+        return '<p>Code <a href="https://github.com/langkilde/daniel.langkilde.se/blob/master/public/views/projects/points.html" target="_blank">here</a></p>';
+    }
+
+    function createSvgCanvas() {
+        console.log('detected window height = %s, width = %s', HEIGHT, WIDTH);
+        console.log('adding margin =', MARGIN);
+        return '<svg class=\"chart\" width=\"'+(WIDTH-MARGIN)+'\" height=\"'+(HEIGHT-MARGIN)+'\"></svg>';
+    }
+
+    function update() {
+        drawPoints(points);
+        updatePoints(points);
+        setTimeout(update, 30);
+    }
+
+    function generatePoints(num_points) {
+        console.log("generating", num_points, "points");
+        var points = [];
+        for (i = 0; i < num_points; i++) {
+            var point = {};
+            point.x = MARGIN + Math.random()*(WIDTH - MARGIN);
+            point.y = MARGIN + Math.random()*(HEIGHT - MARGIN);
+            point.mass = 1000 + (1 - jStat.beta.sample(10.0, 0.05))*1000000;
+            point.dxdt = 0;
+            point.dydt = 0;
+            point.id = i;
+            points.push(point);
+        }
+        return points;
+    }
+
+    function drawPoints(data) {
+        d3.selectAll('g').remove();
+        var elem = d3.selectAll("svg").selectAll("g")
+            .data(data);
+
+        var elemEnter = elem.enter()
+            .append("g")
+            .attr("x", function(d) { return d.x})
+            .attr("y", function(d) { return d.y});
+
+        var x = d3.scaleLinear()
+            .domain([0, 0.1])
+            .range([50, 255]);
+
+        elemEnter.append("circle")
+            .attr("cx", function(d) { return d.x})
+            .attr("cy", function(d) { return d.y})
+            .attr("r",  function(d) { return Math.pow(d.mass * (3/(4*Math.PI)), 1/3);})
+            .attr("fill", function(d) {
+                var v = Math.round(x(d.speed));
+                return "rgb("+Math.round(v*0.8)+","+Math.round(v*0.25)+",0)"
+            });
+
+        elemEnter.append("line")
+            .attr("x1", function(d) {return d.x})
+            .attr("y1", function(d) {return d.y})
+            .attr("x2", function(d) {return d.x + d.dxdt * 100 })
+            .attr("y2", function(d) {return d.y + d.dydt * 100 })
+            .attr("stroke", "black")
+            .attr("stroke-widht", 5);
+    }
+
+    function updatePoints(data) {
+        _.each(data, function(p1) {
+            _.each(data, function(p2) {
+                if (p1 !== p2) {
+                    var r   = distance(p1.x, p1.y, p2.x, p2.y);
+                    if (r < 50) r = 150; // protect from huge numbers as result of division by near zero
+                    var f   = force(p1.mass, p2.mass, r, data.length);
+                    if (f > 5) f = 5; // protect from points drifting off too far
+                    if (f < 0.0001) f = 0.0001; // protect from huge numbers as result of division by near zero
+                    var dir = direction(p1.x, p1.y, p2.x, p2.y);
+                    p1.dxdt += dir[0]*f;
+                    p1.dydt += dir[1]*f;
+                    p1.speed = Math.sqrt(Math.pow(Math.abs(p1.dxdt), 2) + Math.pow(Math.abs(p1.dydt), 2));
+                    p1.x += p1.dxdt;
+                    p1.y += p1.dydt;
+                }
+            });
+        });
+    }
+
+    function direction(x1, y1, x2, y2) {
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var l = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+        if (l < 50) l = 150; // protect from division by near zero
+        return [dx / l, dy / l];
+    }
+
+    function force(m1, m2, r, c) {
+        // Set a reasonable gravity value
+        var gravity_constant = 0.00000001/c;
+        return (gravity_constant * (m1 * m2)) / Math.pow(r, 2);
+    }
+
+    function distance(x1, y1, x2, y2) {
+        return Math.sqrt(Math.pow(Math.abs(x1 - x2), 2) + Math.pow(Math.abs(y1 - y2), 2));
+    }
+
+</script>
+</html>
